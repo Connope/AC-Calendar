@@ -1,0 +1,17 @@
+villager_1 = _
+villager_2 = _
+villager_3 = _
+villager_4 = _
+villager_5 = _
+villager_6 = _
+villager_7 = _
+villager_8 = _
+villager_9 = _
+villager_10 = _
+island = _
+time_zone = Europe/London
+calendar_name = Animal Crossing
+google_calendar = 1
+icalendar = 1
+
+ 
