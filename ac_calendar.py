@@ -139,25 +139,31 @@ def retrieve_villager_data():
         else:
             villager_data[villager_name.lower()] = [villager_birthday[2], str(month_to_number[villager_birthday[0]])]
     return villager_data
-	
-def make_new_event(service, google_calendar, icalendar, calendar_id, icalendar_object, villager, island, time_zone, villager_data):
+
+def check_villager_data(villager, villager_data):
     """
-    Creates a new event with the required parameters. Adds it to Google Calendar and the icalendar 
-    string if required. 
+    Checks to make sure the villager is a valid villager. Returns its data if so, and 0
+    otherwise.
     """
-    
     # Check the villager's name to make sure they are valid.
     if villager.lower() not in villager_data:
-        print(f"{villager} is not a valid villager. Please check to make sure you have entered their name correctly.")
         return 0
-    
+    else:
+        return villager_data[villager.lower()]
+        
+def format_birthday(this_villager_data):
+    """
+    Formats and returns the villager's birthday and the day after in the format
+    required.
+    """
+
     # Checks if the villager's birthday has already happened this year and sets their next
     # birthday to next year if so.
     current_date = datetime.datetime.now()
     current_year = current_date.year
-    birthday = datetime.datetime(current_year, int(villager_data[villager.lower()][1]), int(villager_data[villager.lower()][0]))
+    birthday = datetime.datetime(current_year, int(this_villager_data[1]), int(this_villager_data[0]))
     if birthday < current_date:
-        birthday = datetime.datetime(current_year + 1, int(villager_data[villager.lower()][1]), int(villager_data[villager.lower()][0]))
+        birthday = datetime.datetime(current_year + 1, int(this_villager_data[1]), int(this_villager_data[0]))
     birth_after_day = birthday + datetime.timedelta(days = 1)
     
     # Appends leading 0's to 1 digit months and days so dates can be written is YYYY-MM-DD format
@@ -165,75 +171,79 @@ def make_new_event(service, google_calendar, icalendar, calendar_id, icalendar_o
     month = lambda date : date.month if len(str(date.month)) == 2 else "0" + str(date.month)
     day = lambda date: date.day if len(str(date.day)) == 2 else "0" + str(date.day)
 
-    formatted_birthday = f"{birthday.year}-{month(birthday)}-{day(birthday)}"
-    formatted_birth_after_day = f"{birth_after_day.year}-{month(birth_after_day)}-{day(birth_after_day)}"
+    birthday = f"{birthday.year}-{month(birthday)}-{day(birthday)}"
+    birth_after_day = f"{birth_after_day.year}-{month(birth_after_day)}-{day(birth_after_day)}"
+    return birthday, birth_after_day
     
-    # Set up the event as a dictionary.
-    if island != None:
-        event = {
+def event_setup(villager, island, time_zone, birthday, birth_after_day):
+    """
+    Sets up the event in the required format, ready to be added to Google Calendar
+    or an iCalendar file.
+    """
+    event = {
             'summary': f"{villager}'s birthday",
-            'location': island,
             'start': {
-                'date': formatted_birthday,
+                'date': birthday,
                 'timeZone': time_zone,
             },
             'end': {
-                'date': formatted_birth_after_day,
+                'date': birth_after_day,
                 'timeZone': time_zone,
             },
-            'recurrence': [f'RRULE:FREQ=YEARLY;BYMONTHDAY={day(birthday)};BYMONTH={month(birthday)}'],
+            'recurrence': [f'RRULE:FREQ=YEARLY;BYMONTHDAY={birthday[8:10]};BYMONTH={birthday[5:7]}'],
         }
-        if icalendar:
-            ical_event = Event()
-            ical_event.name = event['summary']
-            ical_event.begin = event['start']['date']
-            ical_event.location = event['location']
-            ical_event.make_all_day()
-            ical_event_string = f"{str(ical_event)[:-10]}{event['recurrence'][0]}\n\n{str(ical_event)[-10:]}" 
-            icalendar_object += f"{ical_event_string}\n\n"
-    else:
-        event = {
-            'summary': f"{villager}'s birthday",
-            'start': {
-                'date': formatted_birthday,
-                'timeZone': time_zone,
-            },
-            'end': {
-                'date': formatted_birth_after_day,
-                'timeZone': time_zone,
-            },
-            'recurrence': [f'RRULE:FREQ=YEARLY;BYMONTHDAY={day(birthday)};BYMONTH={month(birthday)}'],
-        }
-        if icalendar:
-            ical_event = Event()
-            ical_event.name = event['summary']
-            ical_event.begin = event['start']['date']
-            ical_event.make_all_day()
-            ical_event_string = f"{str(ical_event)[:-10]}{event['recurrence'][0]}\n\n{str(ical_event)[-10:]}"
-            icalendar_object += f"{ical_event_string}\n\n"
-    if google_calendar:        
-        service.events().insert(calendarId = calendar_id, body = event).execute()
-        
-    print(f"Successfully added {villager}'s birthday")
+    if not not island:
+        event['location'] = island
+    
+    return event
+    
+def add_to_google_calendar(service, calendar_id, event):
+    """
+    Adds the event to the Google Calendar.
+    """
+    return service.events().insert(calendarId = calendar_id, body = event).execute()
+    
+def add_to_icalendar(icalendar_object, event):
+    """
+    Adds the event to the iCalendar string.
+    """
+    ical_event = Event()
+    ical_event.name = event['summary']
+    ical_event.begin = event['start']['date']
+    if 'location' in event:
+        ical_event.location = event['location']
+    ical_event.make_all_day()
+    ical_event_string = f"{str(ical_event)[:-10]}{event['recurrence'][0]}\n\n{str(ical_event)[-10:]}"
+    icalendar_object += f"{ical_event_string}\n\n"
     return icalendar_object
+
 
 def main():	
     villagers, island, time_zone, calendar_name, google_calendar, icalendar = read_config()
     if google_calendar:
         service = calendar_auth()
         calendar_id = make_new_google_calendar(service, time_zone, calendar_name)
-    else:
-        service = None
-        calendar_id = None
+        if calendar_id == 0:
+            google_calendar = False
     if icalendar:
         icalendar_object = make_new_icalendar()
-    else:
-        icalendar_object = None
         
     villager_data = retrieve_villager_data()
 
     for villager in villagers:
-        icalendar_object = make_new_event(service, google_calendar, icalendar, calendar_id, icalendar_object, villager, island, time_zone, villager_data)
+        this_villager_data = check_villager_data(villager, villager_data)
+        if this_villager_data == 0:
+            print(f"{villager} is not a valid villager. Please check to make sure you have entered their name correctly.")
+            continue
+        else:
+            birthday, birth_after_day = format_birthday(this_villager_data)
+            event = event_setup(villager, island, time_zone, birthday, birth_after_day)
+            if google_calendar:
+                add_to_google_calendar(service, calendar_id, event)
+                print(f"Successfully added {villager}'s birthday to Google Calendar")
+            if icalendar:
+                add_to_icalendar(icalendar_object, event)
+            print(f"Successfully added {villager}'s birthday to iCalendar")
 
     if icalendar:
         icalendar_object += f'END:VCALENDAR'
