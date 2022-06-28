@@ -1,4 +1,4 @@
-arrow==0.14.7
+arrow==0.15.1
 beautifulsoup4==4.9.0
 bs4==0.0.1
 cachetools==4.1.0
